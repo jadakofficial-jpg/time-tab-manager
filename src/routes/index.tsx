@@ -293,8 +293,16 @@ function CalendarTab({ data, setData, money }: P) {
   const [y = 2026, mo = 1] = month.split("-").map(Number);
   const days = new Date(y, mo, 0).getDate();
   const lead = (new Date(y, mo - 1, 1).getDay() + 6) % 7;
+  const [filter, setFilter] = useState<"all" | "scheduled" | "worked" | "notes">("all");
+  const now = new Date();
+  const isWorked = (s: Shift) => {
+    const end = new Date(`${s.date}T${s.end}`);
+    if (s.end <= s.start) end.setDate(end.getDate() + 1);
+    return end <= now;
+  };
+  const pass = (s: Shift) => filter === "all" || (filter === "worked" ? isWorked(s) : filter === "scheduled" ? !isWorked(s) : !!s.note?.trim());
   const byDay: Record<string, Shift[]> = {};
-  data.shifts.filter((s) => s.date.startsWith(month)).forEach((s) => (byDay[s.date] ??= []).push(s));
+  data.shifts.filter((s) => s.date.startsWith(month) && pass(s)).forEach((s) => (byDay[s.date] ??= []).push(s));
   const shift = (n: number) => { const d = new Date(y, mo - 1 + n, 1); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); setSel(null); };
   const selList = sel ? (byDay[sel] ?? []).sort((a, b) => a.start.localeCompare(b.start)) : [];
   const upd = (id: string, patch: Partial<Shift>) => setData((d) => ({ ...d, shifts: d.shifts.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
@@ -305,6 +313,11 @@ function CalendarTab({ data, setData, money }: P) {
         <Button variant="ghost" onClick={() => shift(-1)}>‹</Button>
         <h2 className="font-semibold">{new Date(y, mo - 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
         <Button variant="ghost" onClick={() => shift(1)}>›</Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {([["all", "All"], ["scheduled", "Scheduled"], ["worked", "Worked"], ["notes", "With notes"]] as const).map(([k, l]) => (
+          <Button key={k} size="sm" variant={filter === k ? "default" : "outline"} onClick={() => setFilter(k)}>{l}</Button>
+        ))}
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d}>{d}</div>)}
