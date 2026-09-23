@@ -8,8 +8,11 @@ import { Card } from "@/components/ui/card";
 import {
   type Data, type Shift, type Summary, uid, useData, shiftHours, shiftPay, summarize, rateFor, toICS, fromICS, download,
 } from "@/lib/shifts";
-import { Trash2, Pencil, Download, Upload, CalendarPlus, Sun, Moon } from "lucide-react";
+import { Trash2, Pencil, Download, Upload, CalendarPlus, Sun, Moon, Wand2 } from "lucide-react";
 import { useEffect } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { Textarea } from "@/components/ui/textarea";
+import { planWeek, type DraftShift } from "@/lib/ai-plan.functions";
 
 function useTheme(): ["light" | "dark", () => void] {
   const [theme, setTheme] = useState<"light" | "dark">(() =>
@@ -107,6 +110,7 @@ function ShiftsTab({ data, setData, money }: P) {
 
   return (
     <div className="space-y-4 pt-4">
+      <AiPlanner data={data} setData={setData} money={money} />
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap gap-2">
           {data.templates.map((t) => (
@@ -155,6 +159,58 @@ function ShiftsTab({ data, setData, money }: P) {
         ))}
       </div>
     </div>
+  );
+}
+
+function AiPlanner({ data, setData, money }: P) {
+  const run = useServerFn(planWeek);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [drafts, setDrafts] = useState<(DraftShift & { id: string })[]>([]);
+  const go = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true); setErr("");
+    try {
+      const r = await run({ data: { text, today: today(), templates: data.templates.map(({ name, start, end, breakMin }) => ({ name, start, end, breakMin })) } });
+      if (r.error) setErr(r.error);
+      else if (!r.shifts.length) setErr("No shifts found in that description.");
+      setDrafts(r.shifts.map((s) => ({ ...s, id: uid() })));
+    } catch { setErr("Couldn't reach the AI. Check your connection."); }
+    finally { setBusy(false); }
+  };
+  const upd = (id: string, p: Partial<DraftShift>) => setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...p } : d)));
+  const saveAll = () => { setData((d) => ({ ...d, shifts: [...d.shifts, ...drafts.map((x) => ({ ...x, id: uid() }))] })); setDrafts([]); setText(""); };
+  return (
+    <Card className="space-y-3 p-4">
+      <h2 className="flex items-center gap-2 font-semibold"><Wand2 className="h-4 w-4" />Plan my week with AI</h2>
+      <Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Morning shift Mon–Wed, day shift Friday with 30 min break, Saturday 10 to 14" />
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-destructive">{err}</span>
+        <Button onClick={go} disabled={busy || !text.trim()}>{busy ? "Thinking…" : "Create drafts"}</Button>
+      </div>
+      {drafts.length > 0 && (
+        <div className="space-y-2">
+          {drafts.map((s) => (
+            <div key={s.id} className="grid grid-cols-2 items-end gap-2 border-t border-border pt-2 sm:grid-cols-[1.3fr_1fr_1fr_80px_1fr_auto]">
+              <Field label="Date"><Input type="date" value={s.date} onChange={(e) => upd(s.id, { date: e.target.value })} /></Field>
+              <Field label="Start"><Input type="time" value={s.start} onChange={(e) => upd(s.id, { start: e.target.value })} /></Field>
+              <Field label="End"><Input type="time" value={s.end} onChange={(e) => upd(s.id, { end: e.target.value })} /></Field>
+              <Field label="Break"><Input type="number" min={0} value={s.breakMin} onChange={(e) => upd(s.id, { breakMin: +e.target.value })} /></Field>
+              <Field label="Note"><Input value={s.note} onChange={(e) => upd(s.id, { note: e.target.value })} /></Field>
+              <div className="flex items-center gap-1 text-sm">
+                <span className="whitespace-nowrap">{money(shiftPay({ ...s }, data.rates))}</span>
+                <Button size="icon" variant="ghost" aria-label="Remove draft" onClick={() => setDrafts((ds) => ds.filter((x) => x.id !== s.id))}><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          ))}
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <Button variant="ghost" onClick={() => setDrafts([])}>Discard</Button>
+            <Button onClick={saveAll}>Add {drafts.length} shift{drafts.length > 1 ? "s" : ""}</Button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
