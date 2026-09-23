@@ -8,7 +8,28 @@ import { Card } from "@/components/ui/card";
 import {
   type Data, type Shift, type Summary, uid, useData, shiftHours, shiftPay, summarize, rateFor, toICS, fromICS, download,
 } from "@/lib/shifts";
-import { Trash2, Pencil, Download, Upload, CalendarPlus } from "lucide-react";
+import { Trash2, Pencil, Download, Upload, CalendarPlus, Sun, Moon } from "lucide-react";
+import { useEffect } from "react";
+
+function useTheme(): ["light" | "dark", () => void] {
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    document.documentElement.classList.contains("dark") ? "dark" : "light",
+  );
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    try { localStorage.setItem("theme", theme); } catch { /* ignore */ }
+  }, [theme]);
+  return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
+}
+
+function ThemeToggle() {
+  const [theme, toggle] = useTheme();
+  return (
+    <Button size="icon" variant="ghost" aria-label="Toggle dark mode" onClick={toggle}>
+      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,9 +55,12 @@ function App() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-3xl px-4 py-4">
-          <h1 className="text-2xl font-bold tracking-tight">Shift Control</h1>
-          <p className="text-sm text-muted-foreground">{data.workplace}</p>
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Shift Control</h1>
+            <p className="text-sm text-muted-foreground">{data.workplace}</p>
+          </div>
+          <ThemeToggle />
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">
