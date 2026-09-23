@@ -31,7 +31,5 @@ export function registerSW() {
     void unregisterAppSW().catch(() => {});
     return;
   }
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register(SW_URL, { scope: "/" }).catch(() => {});
-  });
+  navigator.serviceWorker.register(SW_URL, { scope: "/" }).catch(() => {});
 }
