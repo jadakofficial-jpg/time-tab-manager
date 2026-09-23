@@ -49,7 +49,7 @@ function App() {
             <TabsTrigger value="data">Backup</TabsTrigger>
           </TabsList>
           <TabsContent value="shifts"><ShiftsTab data={data} setData={setData} money={money} /></TabsContent>
-          <TabsContent value="calendar"><CalendarTab data={data} money={money} /></TabsContent>
+          <TabsContent value="calendar"><CalendarTab data={data} setData={setData} money={money} /></TabsContent>
           <TabsContent value="report"><ReportTab data={data} money={money} /></TabsContent>
           <TabsContent value="setup"><SetupTab data={data} setData={setData} money={money} /></TabsContent>
           <TabsContent value="data"><DataTab data={data} setData={setData} /></TabsContent>
@@ -287,7 +287,7 @@ function DataTab({ data, setData }: Omit<P, "money">) {
   );
 }
 
-function CalendarTab({ data, money }: Omit<P, "setData">) {
+function CalendarTab({ data, setData, money }: P) {
   const [month, setMonth] = useState(today().slice(0, 7));
   const [sel, setSel] = useState<string | null>(null);
   const [y = 2026, mo = 1] = month.split("-").map(Number);
@@ -296,7 +296,9 @@ function CalendarTab({ data, money }: Omit<P, "setData">) {
   const byDay: Record<string, Shift[]> = {};
   data.shifts.filter((s) => s.date.startsWith(month)).forEach((s) => (byDay[s.date] ??= []).push(s));
   const shift = (n: number) => { const d = new Date(y, mo - 1 + n, 1); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); setSel(null); };
-  const selList = sel ? (byDay[sel] ?? []) : [];
+  const selList = sel ? (byDay[sel] ?? []).sort((a, b) => a.start.localeCompare(b.start)) : [];
+  const upd = (id: string, patch: Partial<Shift>) => setData((d) => ({ ...d, shifts: d.shifts.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+  const add = (t: { start: string; end: string; breakMin: number }) => sel && setData((d) => ({ ...d, shifts: [...d.shifts, { id: uid(), date: sel, ...t, note: "" }] }));
   return (
     <div className="space-y-4 pt-4">
       <div className="flex items-center justify-between">
@@ -330,9 +332,25 @@ function CalendarTab({ data, money }: Omit<P, "setData">) {
       {sel && (
         <Card className="space-y-2 p-4">
           <h3 className="font-semibold">{new Date(sel + "T00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h3>
-          {selList.length === 0 ? <p className="text-sm text-muted-foreground">No shifts.</p> : selList.map((s) => (
-            <div key={s.id} className="flex justify-between text-sm"><span>{s.start}–{s.end}{s.note ? ` · ${s.note}` : ""}</span><span>{fmtH(shiftHours(s))} · {money(shiftPay(s, data.rates))}</span></div>
+          {selList.length === 0 && <p className="text-sm text-muted-foreground">No shifts.</p>}
+          {selList.map((s) => (
+            <div key={s.id} className="grid grid-cols-2 items-end gap-2 border-t border-border pt-2 sm:grid-cols-[1fr_1fr_90px_1fr_auto]">
+              <Field label="Start"><Input type="time" value={s.start} onChange={(e) => upd(s.id, { start: e.target.value })} /></Field>
+              <Field label="End"><Input type="time" value={s.end} onChange={(e) => upd(s.id, { end: e.target.value })} /></Field>
+              <Field label="Break"><Input type="number" min={0} value={s.breakMin} onChange={(e) => upd(s.id, { breakMin: +e.target.value })} /></Field>
+              <Field label="Note"><Input value={s.note ?? ""} onChange={(e) => upd(s.id, { note: e.target.value })} /></Field>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="whitespace-nowrap">{fmtH(shiftHours(s))} · {money(shiftPay(s, data.rates))}</span>
+                <Button size="icon" variant="ghost" aria-label="Delete shift" onClick={() => setData((d) => ({ ...d, shifts: d.shifts.filter((x) => x.id !== s.id) }))}><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            </div>
           ))}
+          <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+            {data.templates.map((t) => (
+              <Button key={t.id} size="sm" variant="secondary" onClick={() => add({ start: t.start, end: t.end, breakMin: t.breakMin })}>+ {t.name}</Button>
+            ))}
+            <Button size="sm" variant="outline" onClick={() => add({ start: "09:00", end: "17:00", breakMin: 0 })}>+ Custom</Button>
+          </div>
         </Card>
       )}
     </div>
