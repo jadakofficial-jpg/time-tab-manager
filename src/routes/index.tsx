@@ -41,13 +41,15 @@ function App() {
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">
         <Tabs defaultValue="shifts">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="shifts">Shifts</TabsTrigger>
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="report">Report</TabsTrigger>
             <TabsTrigger value="setup">Work & Rate</TabsTrigger>
             <TabsTrigger value="data">Backup</TabsTrigger>
           </TabsList>
           <TabsContent value="shifts"><ShiftsTab data={data} setData={setData} money={money} /></TabsContent>
+          <TabsContent value="calendar"><CalendarTab data={data} money={money} /></TabsContent>
           <TabsContent value="report"><ReportTab data={data} money={money} /></TabsContent>
           <TabsContent value="setup"><SetupTab data={data} setData={setData} money={money} /></TabsContent>
           <TabsContent value="data"><DataTab data={data} setData={setData} /></TabsContent>
@@ -281,6 +283,58 @@ function DataTab({ data, setData }: Omit<P, "money">) {
         </div>
       </Card>
       {msg && <p className="text-sm text-muted-foreground">{msg}</p>}
+    </div>
+  );
+}
+
+function CalendarTab({ data, money }: Omit<P, "setData">) {
+  const [month, setMonth] = useState(today().slice(0, 7));
+  const [sel, setSel] = useState<string | null>(null);
+  const [y = 2026, mo = 1] = month.split("-").map(Number);
+  const days = new Date(y, mo, 0).getDate();
+  const lead = (new Date(y, mo - 1, 1).getDay() + 6) % 7;
+  const byDay: Record<string, Shift[]> = {};
+  data.shifts.filter((s) => s.date.startsWith(month)).forEach((s) => (byDay[s.date] ??= []).push(s));
+  const shift = (n: number) => { const d = new Date(y, mo - 1 + n, 1); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); setSel(null); };
+  const selList = sel ? (byDay[sel] ?? []) : [];
+  return (
+    <div className="space-y-4 pt-4">
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" onClick={() => shift(-1)}>‹</Button>
+        <h2 className="font-semibold">{new Date(y, mo - 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
+        <Button variant="ghost" onClick={() => shift(1)}>›</Button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: lead }).map((_, i) => <div key={"e" + i} />)}
+        {Array.from({ length: days }, (_, i) => {
+          const date = `${month}-${String(i + 1).padStart(2, "0")}`;
+          const list = byDay[date] ?? [];
+          const sum = summarize(list, data.rates);
+          const isToday = date === today();
+          return (
+            <button key={date} onClick={() => setSel(date)}
+              className={`min-h-20 rounded-md border p-1 text-left text-xs transition-colors ${sel === date ? "border-primary ring-1 ring-primary" : "border-border"} ${list.length ? "bg-accent" : "bg-card"} ${i === 15 ? "" : ""}`}>
+              <div className={`font-semibold ${isToday ? "text-primary" : ""}`}>{i + 1}</div>
+              {list.length > 0 && (<>
+                <div className="truncate text-muted-foreground">{list.map((s) => s.start).join(", ")}</div>
+                <div>{fmtH(sum.hours)}</div>
+                <div className="font-semibold">{money(sum.pay)}</div>
+              </>)}
+            </button>
+          );
+        })}
+      </div>
+      {sel && (
+        <Card className="space-y-2 p-4">
+          <h3 className="font-semibold">{new Date(sel + "T00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h3>
+          {selList.length === 0 ? <p className="text-sm text-muted-foreground">No shifts.</p> : selList.map((s) => (
+            <div key={s.id} className="flex justify-between text-sm"><span>{s.start}–{s.end}{s.note ? ` · ${s.note}` : ""}</span><span>{fmtH(shiftHours(s))} · {money(shiftPay(s, data.rates))}</span></div>
+          ))}
+        </Card>
+      )}
     </div>
   );
 }
