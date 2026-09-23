@@ -159,7 +159,7 @@ function ReportTab({ data, money }: Omit<P, "setData">) {
       k, a: summarize(v.filter((s) => +s.date.slice(8) <= 15), data.rates), b: summarize(v.filter((s) => +s.date.slice(8) > 15), data.rates), t: summarize(v, data.rates),
     }));
   }, [data]);
-  const [y, mo] = month.split("-").map(Number);
+  const [y = 2026, mo = 1] = month.split("-").map(Number);
   const last = new Date(y, mo, 0).getDate();
   return (
     <div className="space-y-4 pt-4">

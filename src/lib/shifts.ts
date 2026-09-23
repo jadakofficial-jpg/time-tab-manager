@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 export type Template = { id: string; name: string; start: string; end: string; breakMin: number };
-export type Shift = { id: string; date: string; start: string; end: string; breakMin: number; note?: string };
+export type Shift = { id: string; date: string; start: string; end: string; breakMin: number; note?: string | undefined };
 export type Rate = { id: string; from: string; rate: number };
 export type Data = { workplace: string; currency: string; templates: Template[]; shifts: Shift[]; rates: Rate[] };
 
@@ -37,7 +37,7 @@ export function useData() {
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
+  return (h ?? 0) * 60 + (m ?? 0);
 };
 
 export function shiftHours(s: { start: string; end: string; breakMin: number }) {
