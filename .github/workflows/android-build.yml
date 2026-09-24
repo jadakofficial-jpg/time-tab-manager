@@ -27,7 +27,16 @@ jobs:
         run: npm run build:android
 
       - name: Sync Capacitor Android project
-        run: npx cap sync android
+        run: |
+          set +e
+          OUTPUT=$(npx cap sync android 2>&1)
+          STATUS=$?
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            SAFE=$(echo "$OUTPUT" | tr '\n' ' ' | head -c 3000)
+            echo "::error::cap sync failed: $SAFE"
+            exit 1
+          fi
 
       - name: Build debug APK
         working-directory: android
