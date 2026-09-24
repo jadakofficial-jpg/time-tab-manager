@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Shift Control</string>
+    <string name="title_activity_main">Shift Control</string>
+    <string name="package_name">app.lovable.timetabmanager</string>
+    <string name="custom_url_scheme">app.lovable.timetabmanager</string>
+</resources>
