@@ -7,6 +7,11 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Set PUBLIC_BASE_PATH="/time-tab-manager/" when building for GitHub Pages
+// (a subpath deployment). Capacitor's Android build leaves this unset, so
+// it serves from "/" as before.
+const base = process.env.PUBLIC_BASE_PATH || "/";
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
@@ -15,6 +20,7 @@ export default defineConfig({
     spa: { enabled: true },
   },
   vite: {
+    base,
     plugins: [
       VitePWA({
         strategies: "generateSW",

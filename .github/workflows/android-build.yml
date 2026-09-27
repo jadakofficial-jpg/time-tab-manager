@@ -48,10 +48,13 @@ jobs:
           name: shift-control-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Build Pages bundle (subpath-aware)
+        run: rm -rf .output dist && npm run build:pages
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: android-dist
+          path: pages-dist
 
   deploy-pages:
     needs: build

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "build:android": "vite build && node scripts/build-android.mjs",
+    "build:android": "vite build && node scripts/build-android.mjs android-dist",
+    "build:pages": "PUBLIC_BASE_PATH=/time-tab-manager/ vite build && PUBLIC_BASE_PATH=/time-tab-manager/ node scripts/build-android.mjs pages-dist",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

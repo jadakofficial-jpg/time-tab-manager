@@ -1,5 +1,7 @@
 // Single guarded service-worker registrar. Never registers in dev or Lovable preview.
-const SW_URL = "/sw.js";
+// Respects Vite's base path so this also works from a GitHub Pages subpath
+// deployment (e.g. "/time-tab-manager/sw.js"), not just from the domain root.
+const SW_URL = `${import.meta.env.BASE_URL}sw.js`;
 
 function refused(): boolean {
   if (!import.meta.env.PROD) return true;
@@ -31,5 +33,5 @@ export function registerSW() {
     void unregisterAppSW().catch(() => {});
     return;
   }
-  navigator.serviceWorker.register(SW_URL, { scope: "/" }).catch(() => {});
+  navigator.serviceWorker.register(SW_URL, { scope: import.meta.env.BASE_URL }).catch(() => {});
 }
