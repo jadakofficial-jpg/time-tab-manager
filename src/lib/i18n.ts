@@ -151,8 +151,8 @@ const translations: Record<Lang, Dict> = {
     tabShifts: "Смены",
     tabCalendar: "Календарь",
     tabReport: "Отчёт",
-    tabSetup: "Работа и ставка",
-    tabData: "Резерв. копия",
+    tabSetup: "Настройки",
+    tabData: "Бэкап",
 
     // ShiftsTab
     date: "Дата",

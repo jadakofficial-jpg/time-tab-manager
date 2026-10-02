@@ -80,11 +80,11 @@ function App() {
       <main className="mx-auto max-w-3xl px-4 py-6">
         <Tabs defaultValue="shifts">
           <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="shifts">{t.tabShifts}</TabsTrigger>
-            <TabsTrigger value="calendar">{t.tabCalendar}</TabsTrigger>
-            <TabsTrigger value="report">{t.tabReport}</TabsTrigger>
-            <TabsTrigger value="setup">{t.tabSetup}</TabsTrigger>
-            <TabsTrigger value="data">{t.tabData}</TabsTrigger>
+            <TabsTrigger value="shifts" className="truncate overflow-hidden px-1 text-xs sm:px-3 sm:text-sm">{t.tabShifts}</TabsTrigger>
+            <TabsTrigger value="calendar" className="truncate overflow-hidden px-1 text-xs sm:px-3 sm:text-sm">{t.tabCalendar}</TabsTrigger>
+            <TabsTrigger value="report" className="truncate overflow-hidden px-1 text-xs sm:px-3 sm:text-sm">{t.tabReport}</TabsTrigger>
+            <TabsTrigger value="setup" className="truncate overflow-hidden px-1 text-xs sm:px-3 sm:text-sm">{t.tabSetup}</TabsTrigger>
+            <TabsTrigger value="data" className="truncate overflow-hidden px-1 text-xs sm:px-3 sm:text-sm">{t.tabData}</TabsTrigger>
           </TabsList>
           <TabsContent value="shifts"><ShiftsTab data={data} setData={setData} money={money} t={t} locale={locale} /></TabsContent>
           <TabsContent value="calendar"><CalendarTab data={data} setData={setData} money={money} t={t} locale={locale} lang={lang} /></TabsContent>
