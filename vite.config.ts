@@ -10,7 +10,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // Set PUBLIC_BASE_PATH="/time-tab-manager/" when building for GitHub Pages
 // (a subpath deployment). Capacitor's Android build leaves this unset, so
 // it serves from "/" as before.
-const base = process.env.PUBLIC_BASE_PATH || "/";
+const base = process.env["PUBLIC_BASE_PATH"] || "/";
 
 export default defineConfig({
   tanstackStart: {

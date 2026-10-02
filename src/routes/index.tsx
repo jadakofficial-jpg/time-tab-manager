@@ -6,13 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import {
-  type Data, type Shift, type Summary, uid, useData, shiftHours, shiftPay, summarize, rateFor, toICS, fromICS, download,
+  type Data, type Shift, type Summary, uid, useData, shiftHours, shiftPay, summarize, rateFor, inPeriod, toICS, fromICS, download,
 } from "@/lib/shifts";
-import { Trash2, Pencil, Download, Upload, CalendarPlus, Sun, Moon, Wand2 } from "lucide-react";
+import { useLang, weekdayShort, type Dict } from "@/lib/i18n";
+import { Trash2, Pencil, Download, Upload, CalendarPlus, Sun, Moon, Languages } from "lucide-react";
 import { useEffect } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { Textarea } from "@/components/ui/textarea";
-import { planWeek, type DraftShift } from "@/lib/ai-plan.functions";
 
 function useTheme(): ["light" | "dark", () => void] {
   const [theme, setTheme] = useState<"light" | "dark">(() =>
@@ -34,13 +32,22 @@ function ThemeToggle() {
   );
 }
 
+function LangToggle({ lang, toggle }: { lang: "en" | "ru"; toggle: () => void }) {
+  return (
+    <Button size="sm" variant="ghost" aria-label="Switch language" onClick={toggle} className="gap-1.5">
+      <Languages className="h-4 w-4" />
+      {lang === "en" ? "RU" : "EN"}
+    </Button>
+  );
+}
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Shift Control — Shifts, Hours & Pay" },
-      { name: "description", content: "Log shifts, track hourly rates and see pay for the 1–15 and 16–end periods." },
+      { name: "description", content: "Log shifts, track hourly rates and see pay for your custom pay periods." },
       { property: "og:title", content: "Shift Control — Shifts, Hours & Pay" },
-      { property: "og:description", content: "Log shifts, track hourly rates and see half-month pay reports." },
+      { property: "og:description", content: "Log shifts, track hourly rates and see pay-period reports." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -53,6 +60,7 @@ const fmtH = (h: number) => `${h.toFixed(2)}h`;
 
 function App() {
   const [data, setData, ready] = useData();
+  const { lang, t, toggle, locale } = useLang();
   const money = (n: number) => `${data.currency}${n.toFixed(2)}`;
   if (!ready) return <div className="min-h-screen bg-background" />;
   return (
@@ -60,35 +68,38 @@ function App() {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Shift Control</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{t.appName}</h1>
             <p className="text-sm text-muted-foreground">{data.workplace}</p>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <LangToggle lang={lang} toggle={toggle} />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">
         <Tabs defaultValue="shifts">
           <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="shifts">Shifts</TabsTrigger>
-            <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            <TabsTrigger value="report">Report</TabsTrigger>
-            <TabsTrigger value="setup">Work & Rate</TabsTrigger>
-            <TabsTrigger value="data">Backup</TabsTrigger>
+            <TabsTrigger value="shifts">{t.tabShifts}</TabsTrigger>
+            <TabsTrigger value="calendar">{t.tabCalendar}</TabsTrigger>
+            <TabsTrigger value="report">{t.tabReport}</TabsTrigger>
+            <TabsTrigger value="setup">{t.tabSetup}</TabsTrigger>
+            <TabsTrigger value="data">{t.tabData}</TabsTrigger>
           </TabsList>
-          <TabsContent value="shifts"><ShiftsTab data={data} setData={setData} money={money} /></TabsContent>
-          <TabsContent value="calendar"><CalendarTab data={data} setData={setData} money={money} /></TabsContent>
-          <TabsContent value="report"><ReportTab data={data} money={money} /></TabsContent>
-          <TabsContent value="setup"><SetupTab data={data} setData={setData} money={money} /></TabsContent>
-          <TabsContent value="data"><DataTab data={data} setData={setData} /></TabsContent>
+          <TabsContent value="shifts"><ShiftsTab data={data} setData={setData} money={money} t={t} locale={locale} /></TabsContent>
+          <TabsContent value="calendar"><CalendarTab data={data} setData={setData} money={money} t={t} locale={locale} lang={lang} /></TabsContent>
+          <TabsContent value="report"><ReportTab data={data} money={money} t={t} /></TabsContent>
+          <TabsContent value="setup"><SetupTab data={data} setData={setData} money={money} t={t} /></TabsContent>
+          <TabsContent value="data"><DataTab data={data} setData={setData} t={t} /></TabsContent>
         </Tabs>
       </main>
     </div>
   );
 }
 
-type P = { data: Data; setData: (f: (d: Data) => Data) => void; money: (n: number) => string };
+type P = { data: Data; setData: (f: (d: Data) => Data) => void; money: (n: number) => string; t: Dict };
 
-function ShiftsTab({ data, setData, money }: P) {
+function ShiftsTab({ data, setData, money, t, locale }: P & { locale: string | undefined }) {
   const blank = { date: today(), start: "07:30", end: "16:30", breakMin: 0, note: "" };
   const [form, setForm] = useState<Omit<Shift, "id">>(blank);
   const [editId, setEditId] = useState<string | null>(null);
@@ -110,107 +121,54 @@ function ShiftsTab({ data, setData, money }: P) {
 
   return (
     <div className="space-y-4 pt-4">
-      <AiPlanner data={data} setData={setData} money={money} />
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap gap-2">
-          {data.templates.map((t) => (
-            <Button key={t.id} variant="secondary" size="sm" onClick={() => setForm((f) => ({ ...f, start: t.start, end: t.end, breakMin: t.breakMin }))}>
-              {t.name} <span className="ml-1 text-muted-foreground">{t.start}–{t.end}</span>
+          {data.templates.map((tpl) => (
+            <Button key={tpl.id} variant="secondary" size="sm" onClick={() => setForm((f) => ({ ...f, start: tpl.start, end: tpl.end, breakMin: tpl.breakMin }))}>
+              {tpl.name} <span className="ml-1 text-muted-foreground">{tpl.start}–{tpl.end}</span>
             </Button>
           ))}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Date"><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
-          <Field label="Start"><Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></Field>
-          <Field label="End"><Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} /></Field>
-          <Field label="Break (min)"><Input type="number" min={0} value={form.breakMin} onChange={(e) => setForm({ ...form, breakMin: +e.target.value })} /></Field>
+          <Field label={t.date}><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+          <Field label={t.start}><Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></Field>
+          <Field label={t.end}><Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} /></Field>
+          <Field label={t.breakMin}><Input type="number" min={0} value={form.breakMin} onChange={(e) => setForm({ ...form, breakMin: +e.target.value })} /></Field>
         </div>
-        <Field label="Note"><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Optional" /></Field>
+        <Field label={t.note}><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={t.notePlaceholder} /></Field>
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
             {fmtH(shiftHours(form))} × {money(rateFor(form.date, data.rates))}/h = <b className="text-foreground">{money(shiftHours(form) * rateFor(form.date, data.rates))}</b>
           </span>
           <div className="flex gap-2">
-            {editId && <Button variant="ghost" onClick={() => { setEditId(null); setForm(blank); }}>Cancel</Button>}
-            <Button onClick={save}>{editId ? "Update shift" : "Add shift"}</Button>
+            {editId && <Button variant="ghost" onClick={() => { setEditId(null); setForm(blank); }}>{t.cancel}</Button>}
+            <Button onClick={save}>{editId ? t.updateShift : t.addShift}</Button>
           </div>
         </div>
-        {data.rates.length === 0 && <p className="text-sm text-destructive">Set your hourly rate in “Work & Rate” to see pay.</p>}
+        {data.rates.length === 0 && <p className="text-sm text-destructive">{t.setRateHint}</p>}
       </Card>
 
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Shifts</h2>
+        <h2 className="font-semibold">{t.shiftsHeading}</h2>
         <Input type="month" className="w-44" value={month} onChange={(e) => setMonth(e.target.value)} />
       </div>
-      {list.length === 0 && <p className="text-sm text-muted-foreground">No shifts this month.</p>}
+      {list.length === 0 && <p className="text-sm text-muted-foreground">{t.noShiftsMonth}</p>}
       <div className="space-y-2">
         {list.map((s) => (
           <Card key={s.id} className="flex items-center justify-between p-3">
             <div>
-              <div className="font-medium">{new Date(s.date + "T00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</div>
-              <div className="text-sm text-muted-foreground">{s.start}–{s.end}{s.breakMin ? ` · ${s.breakMin}m break` : ""}{s.note ? ` · ${s.note}` : ""}</div>
+              <div className="font-medium">{new Date(s.date + "T00:00").toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" })}</div>
+              <div className="text-sm text-muted-foreground">{s.start}–{s.end}{s.breakMin ? ` · ${t.breakSuffix(s.breakMin)}` : ""}{s.note ? ` · ${s.note}` : ""}</div>
             </div>
             <div className="flex items-center gap-2">
               <div className="text-right text-sm"><div className="font-semibold">{money(shiftPay(s, data.rates))}</div><div className="text-muted-foreground">{fmtH(shiftHours(s))}</div></div>
-              <Button size="icon" variant="ghost" aria-label="Edit" onClick={() => { setEditId(s.id); setForm({ date: s.date, start: s.start, end: s.end, breakMin: s.breakMin, note: s.note ?? "" }); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil className="h-4 w-4" /></Button>
-              <Button size="icon" variant="ghost" aria-label="Delete" onClick={() => setData((d) => ({ ...d, shifts: d.shifts.filter((x) => x.id !== s.id) }))}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={t.edit} onClick={() => { setEditId(s.id); setForm({ date: s.date, start: s.start, end: s.end, breakMin: s.breakMin, note: s.note ?? "" }); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={t.delete} onClick={() => setData((d) => ({ ...d, shifts: d.shifts.filter((x) => x.id !== s.id) }))}><Trash2 className="h-4 w-4" /></Button>
             </div>
           </Card>
         ))}
       </div>
     </div>
-  );
-}
-
-function AiPlanner({ data, setData, money }: P) {
-  const run = useServerFn(planWeek);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [drafts, setDrafts] = useState<(DraftShift & { id: string })[]>([]);
-  const go = async () => {
-    if (!text.trim() || busy) return;
-    setBusy(true); setErr("");
-    try {
-      const r = await run({ data: { text, today: today(), templates: data.templates.map(({ name, start, end, breakMin }) => ({ name, start, end, breakMin })) } });
-      if (r.error) setErr(r.error);
-      else if (!r.shifts.length) setErr("No shifts found in that description.");
-      setDrafts(r.shifts.map((s) => ({ ...s, id: uid() })));
-    } catch { setErr("Couldn't reach the AI. Check your connection."); }
-    finally { setBusy(false); }
-  };
-  const upd = (id: string, p: Partial<DraftShift>) => setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...p } : d)));
-  const saveAll = () => { setData((d) => ({ ...d, shifts: [...d.shifts, ...drafts.map((x) => ({ ...x, id: uid() }))] })); setDrafts([]); setText(""); };
-  return (
-    <Card className="space-y-3 p-4">
-      <h2 className="flex items-center gap-2 font-semibold"><Wand2 className="h-4 w-4" />Plan my week with AI</h2>
-      <Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Morning shift Mon–Wed, day shift Friday with 30 min break, Saturday 10 to 14" />
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-destructive">{err}</span>
-        <Button onClick={go} disabled={busy || !text.trim()}>{busy ? "Thinking…" : "Create drafts"}</Button>
-      </div>
-      {drafts.length > 0 && (
-        <div className="space-y-2">
-          {drafts.map((s) => (
-            <div key={s.id} className="grid grid-cols-2 items-end gap-2 border-t border-border pt-2 sm:grid-cols-[1.3fr_1fr_1fr_80px_1fr_auto]">
-              <Field label="Date"><Input type="date" value={s.date} onChange={(e) => upd(s.id, { date: e.target.value })} /></Field>
-              <Field label="Start"><Input type="time" value={s.start} onChange={(e) => upd(s.id, { start: e.target.value })} /></Field>
-              <Field label="End"><Input type="time" value={s.end} onChange={(e) => upd(s.id, { end: e.target.value })} /></Field>
-              <Field label="Break"><Input type="number" min={0} value={s.breakMin} onChange={(e) => upd(s.id, { breakMin: +e.target.value })} /></Field>
-              <Field label="Note"><Input value={s.note} onChange={(e) => upd(s.id, { note: e.target.value })} /></Field>
-              <div className="flex items-center gap-1 text-sm">
-                <span className="whitespace-nowrap">{money(shiftPay({ ...s }, data.rates))}</span>
-                <Button size="icon" variant="ghost" aria-label="Remove draft" onClick={() => setDrafts((ds) => ds.filter((x) => x.id !== s.id))}><Trash2 className="h-4 w-4" /></Button>
-              </div>
-            </div>
-          ))}
-          <div className="flex justify-end gap-2 border-t border-border pt-3">
-            <Button variant="ghost" onClick={() => setDrafts([])}>Discard</Button>
-            <Button onClick={saveAll}>Add {drafts.length} shift{drafts.length > 1 ? "s" : ""}</Button>
-          </div>
-        </div>
-      )}
-    </Card>
   );
 }
 
@@ -228,42 +186,53 @@ function Stat({ title, s, money, strong }: { title: string; s: Summary; money: (
   );
 }
 
-function ReportTab({ data, money }: Omit<P, "setData">) {
+function ReportTab({ data, money, t }: Omit<P, "setData">) {
   const [month, setMonth] = useState(today().slice(0, 7));
   const m = data.shifts.filter((s) => s.date.startsWith(month));
-  const p1 = summarize(m.filter((s) => +s.date.slice(8) <= 15), data.rates);
-  const p2 = summarize(m.filter((s) => +s.date.slice(8) > 15), data.rates);
+  const periodSummaries = data.periods.map((p) => ({
+    period: p,
+    summary: summarize(m.filter((s) => inPeriod(+s.date.slice(8), p)), data.rates),
+  }));
   const all = summarize(data.shifts, data.rates);
   const byMonth = useMemo(() => {
     const g: Record<string, Shift[]> = {};
     data.shifts.forEach((s) => (g[s.date.slice(0, 7)] ??= []).push(s));
     return Object.entries(g).sort((a, b) => b[0].localeCompare(a[0])).map(([k, v]) => ({
-      k, a: summarize(v.filter((s) => +s.date.slice(8) <= 15), data.rates), b: summarize(v.filter((s) => +s.date.slice(8) > 15), data.rates), t: summarize(v, data.rates),
+      k,
+      periods: data.periods.map((p) => summarize(v.filter((s) => inPeriod(+s.date.slice(8), p)), data.rates)),
+      total: summarize(v, data.rates),
     }));
   }, [data]);
-  const [y = 2026, mo = 1] = month.split("-").map(Number);
-  const last = new Date(y, mo, 0).getDate();
   return (
     <div className="space-y-4 pt-4">
       <Input type="month" className="w-44" value={month} onChange={(e) => setMonth(e.target.value)} />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat title={`1 – 15`} s={p1} money={money} />
-        <Stat title={`16 – ${last}`} s={p2} money={money} />
-        <Stat title="Month total" s={summarize(m, data.rates)} money={money} strong />
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+        {periodSummaries.map(({ period, summary }) => (
+          <Stat key={period.id} title={period.label} s={summary} money={money} />
+        ))}
+        <Stat title={t.monthTotal} s={summarize(m, data.rates)} money={money} strong />
       </div>
-      <Stat title="All time" s={all} money={money} />
+      <Stat title={t.allTime} s={all} money={money} />
       <Card className="overflow-x-auto p-0">
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-muted-foreground">
-            <tr><th className="p-3">Month</th><th className="p-3">1–15</th><th className="p-3">16–end</th><th className="p-3">Total</th><th className="p-3">Hours</th></tr>
+            <tr>
+              <th className="p-3">{t.colMonth}</th>
+              {data.periods.map((p) => <th key={p.id} className="p-3">{p.label}</th>)}
+              <th className="p-3">{t.colTotal}</th>
+              <th className="p-3">{t.colHours}</th>
+            </tr>
           </thead>
           <tbody>
             {byMonth.map((r) => (
               <tr key={r.k} className="border-b border-border last:border-0">
-                <td className="p-3 font-medium">{r.k}</td><td className="p-3">{money(r.a.pay)}</td><td className="p-3">{money(r.b.pay)}</td><td className="p-3 font-semibold">{money(r.t.pay)}</td><td className="p-3">{fmtH(r.t.hours)}</td>
+                <td className="p-3 font-medium">{r.k}</td>
+                {r.periods.map((s, i) => <td key={i} className="p-3">{money(s.pay)}</td>)}
+                <td className="p-3 font-semibold">{money(r.total.pay)}</td>
+                <td className="p-3">{fmtH(r.total.hours)}</td>
               </tr>
             ))}
-            {byMonth.length === 0 && <tr><td className="p-3 text-muted-foreground" colSpan={5}>No data yet.</td></tr>}
+            {byMonth.length === 0 && <tr><td className="p-3 text-muted-foreground" colSpan={2 + data.periods.length}>{t.noDataYet}</td></tr>}
           </tbody>
         </table>
       </Card>
@@ -271,54 +240,81 @@ function ReportTab({ data, money }: Omit<P, "setData">) {
   );
 }
 
-function SetupTab({ data, setData, money }: P) {
+function SetupTab({ data, setData, money, t }: P) {
   const [rate, setRate] = useState({ from: today(), rate: "" });
   const [tpl, setTpl] = useState({ name: "", start: "06:00", end: "15:00", breakMin: 0 });
   const [editTpl, setEditTpl] = useState<string | null>(null);
+  const [period, setPeriod] = useState({ label: "", startDay: "1", endDay: "15" });
+  const [editPeriod, setEditPeriod] = useState<string | null>(null);
   return (
     <div className="space-y-4 pt-4">
       <Card className="grid gap-3 p-4 sm:grid-cols-2">
-        <Field label="Workplace"><Input value={data.workplace} onChange={(e) => setData((d) => ({ ...d, workplace: e.target.value }))} /></Field>
-        <Field label="Currency symbol"><Input value={data.currency} onChange={(e) => setData((d) => ({ ...d, currency: e.target.value }))} /></Field>
+        <Field label={t.workplace}><Input value={data.workplace} onChange={(e) => setData((d) => ({ ...d, workplace: e.target.value }))} /></Field>
+        <Field label={t.currencySymbol}><Input value={data.currency} onChange={(e) => setData((d) => ({ ...d, currency: e.target.value }))} /></Field>
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">Hourly rate history</h2>
-        <p className="text-sm text-muted-foreground">Each shift uses the rate in effect on its date.</p>
+        <h2 className="font-semibold">{t.rateHistory}</h2>
+        <p className="text-sm text-muted-foreground">{t.rateHistoryHint}</p>
         <div className="flex flex-wrap items-end gap-2">
-          <Field label="Effective from"><Input type="date" value={rate.from} onChange={(e) => setRate({ ...rate, from: e.target.value })} /></Field>
-          <Field label="Rate / hour"><Input type="number" step="0.01" value={rate.rate} onChange={(e) => setRate({ ...rate, rate: e.target.value })} /></Field>
-          <Button onClick={() => { if (!rate.rate) return; setData((d) => ({ ...d, rates: [...d.rates.filter((r) => r.from !== rate.from), { id: uid(), from: rate.from, rate: +rate.rate }] })); setRate({ ...rate, rate: "" }); }}>Add rate</Button>
+          <Field label={t.effectiveFrom}><Input type="date" value={rate.from} onChange={(e) => setRate({ ...rate, from: e.target.value })} /></Field>
+          <Field label={t.ratePerHour}><Input type="number" step="0.01" value={rate.rate} onChange={(e) => setRate({ ...rate, rate: e.target.value })} /></Field>
+          <Button onClick={() => { if (!rate.rate) return; setData((d) => ({ ...d, rates: [...d.rates.filter((r) => r.from !== rate.from), { id: uid(), from: rate.from, rate: +rate.rate }] })); setRate({ ...rate, rate: "" }); }}>{t.addRate}</Button>
         </div>
         {[...data.rates].sort((a, b) => b.from.localeCompare(a.from)).map((r) => (
           <div key={r.id} className="flex items-center justify-between border-t border-border pt-2 text-sm">
-            <span>From {r.from}</span>
+            <span>{t.fromDate(r.from)}</span>
             <span className="flex items-center gap-2 font-semibold">{money(r.rate)}/h
-              <Button size="icon" variant="ghost" aria-label="Delete rate" onClick={() => setData((d) => ({ ...d, rates: d.rates.filter((x) => x.id !== r.id) }))}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={t.delete} onClick={() => setData((d) => ({ ...d, rates: d.rates.filter((x) => x.id !== r.id) }))}><Trash2 className="h-4 w-4" /></Button>
             </span>
           </div>
         ))}
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">Shift templates</h2>
+        <h2 className="font-semibold">{t.payPeriods}</h2>
+        <p className="text-sm text-muted-foreground">{t.payPeriodsHint}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:items-end">
+          <Field label={t.label}><Input value={period.label} onChange={(e) => setPeriod({ ...period, label: e.target.value })} placeholder="1–15" /></Field>
+          <Field label={t.startDay}><Input type="number" min={1} max={31} value={period.startDay} onChange={(e) => setPeriod({ ...period, startDay: e.target.value })} /></Field>
+          <Field label={t.endDay}><Input type="number" min={1} max={31} value={period.endDay} onChange={(e) => setPeriod({ ...period, endDay: e.target.value })} /></Field>
+          <Button onClick={() => {
+            if (!period.label || !period.startDay || !period.endDay) return;
+            const p = { id: editPeriod ?? uid(), label: period.label, startDay: +period.startDay, endDay: +period.endDay };
+            setData((d) => ({ ...d, periods: editPeriod ? d.periods.map((x) => (x.id === editPeriod ? p : x)) : [...d.periods, p] }));
+            setEditPeriod(null); setPeriod({ label: "", startDay: "1", endDay: "15" });
+          }}>{editPeriod ? t.update : t.addPeriod}</Button>
+        </div>
+        {data.periods.map((p) => (
+          <div key={p.id} className="flex items-center justify-between border-t border-border pt-2 text-sm">
+            <span><b>{p.label}</b> · {p.startDay}–{p.endDay}</span>
+            <span>
+              <Button size="icon" variant="ghost" aria-label={t.edit} onClick={() => { setEditPeriod(p.id); setPeriod({ label: p.label, startDay: String(p.startDay), endDay: String(p.endDay) }); }}><Pencil className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={t.delete} onClick={() => setData((d) => ({ ...d, periods: d.periods.filter((x) => x.id !== p.id) }))}><Trash2 className="h-4 w-4" /></Button>
+            </span>
+          </div>
+        ))}
+      </Card>
+
+      <Card className="space-y-3 p-4">
+        <h2 className="font-semibold">{t.shiftTemplates}</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:items-end">
-          <Field label="Name"><Input value={tpl.name} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} placeholder="Morning" /></Field>
-          <Field label="Start"><Input type="time" value={tpl.start} onChange={(e) => setTpl({ ...tpl, start: e.target.value })} /></Field>
-          <Field label="End"><Input type="time" value={tpl.end} onChange={(e) => setTpl({ ...tpl, end: e.target.value })} /></Field>
-          <Field label="Break (min)"><Input type="number" value={tpl.breakMin} onChange={(e) => setTpl({ ...tpl, breakMin: +e.target.value })} /></Field>
+          <Field label={t.name}><Input value={tpl.name} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} placeholder={t.namePlaceholder} /></Field>
+          <Field label={t.start}><Input type="time" value={tpl.start} onChange={(e) => setTpl({ ...tpl, start: e.target.value })} /></Field>
+          <Field label={t.end}><Input type="time" value={tpl.end} onChange={(e) => setTpl({ ...tpl, end: e.target.value })} /></Field>
+          <Field label={t.breakMin}><Input type="number" value={tpl.breakMin} onChange={(e) => setTpl({ ...tpl, breakMin: +e.target.value })} /></Field>
           <Button onClick={() => {
             if (!tpl.name) return;
-            setData((d) => ({ ...d, templates: editTpl ? d.templates.map((t) => (t.id === editTpl ? { ...tpl, id: editTpl } : t)) : [...d.templates, { ...tpl, id: uid() }] }));
+            setData((d) => ({ ...d, templates: editTpl ? d.templates.map((x) => (x.id === editTpl ? { ...tpl, id: editTpl } : x)) : [...d.templates, { ...tpl, id: uid() }] }));
             setEditTpl(null); setTpl({ name: "", start: "06:00", end: "15:00", breakMin: 0 });
-          }}>{editTpl ? "Update" : "Add"}</Button>
+          }}>{editTpl ? t.update : t.add}</Button>
         </div>
-        {data.templates.map((t) => (
-          <div key={t.id} className="flex items-center justify-between border-t border-border pt-2 text-sm">
-            <span><b>{t.name}</b> · {t.start}–{t.end} · {fmtH(shiftHours(t))}</span>
+        {data.templates.map((tp) => (
+          <div key={tp.id} className="flex items-center justify-between border-t border-border pt-2 text-sm">
+            <span><b>{tp.name}</b> · {tp.start}–{tp.end} · {fmtH(shiftHours(tp))}</span>
             <span>
-              <Button size="icon" variant="ghost" aria-label="Edit template" onClick={() => { setEditTpl(t.id); setTpl({ name: t.name, start: t.start, end: t.end, breakMin: t.breakMin }); }}><Pencil className="h-4 w-4" /></Button>
-              <Button size="icon" variant="ghost" aria-label="Delete template" onClick={() => setData((d) => ({ ...d, templates: d.templates.filter((x) => x.id !== t.id) }))}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={t.edit} onClick={() => { setEditTpl(tp.id); setTpl({ name: tp.name, start: tp.start, end: tp.end, breakMin: tp.breakMin }); }}><Pencil className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={t.delete} onClick={() => setData((d) => ({ ...d, templates: d.templates.filter((x) => x.id !== tp.id) }))}><Trash2 className="h-4 w-4" /></Button>
             </span>
           </div>
         ))}
@@ -327,7 +323,7 @@ function SetupTab({ data, setData, money }: P) {
   );
 }
 
-function DataTab({ data, setData }: Omit<P, "money">) {
+function DataTab({ data, setData, t }: Omit<P, "money">) {
   const jsonRef = useRef<HTMLInputElement>(null);
   const icsRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
@@ -335,28 +331,28 @@ function DataTab({ data, setData }: Omit<P, "money">) {
   return (
     <div className="space-y-4 pt-4">
       <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">Calendar</h2>
+        <h2 className="font-semibold">{t.calendarHeading}</h2>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => download("shifts.ics", toICS(data), "text/calendar")}><CalendarPlus className="mr-2 h-4 w-4" />Export to calendar (.ics)</Button>
-          <Button variant="secondary" onClick={() => icsRef.current?.click()}><Upload className="mr-2 h-4 w-4" />Import .ics</Button>
+          <Button onClick={() => download("shifts.ics", toICS(data), "text/calendar")}><CalendarPlus className="mr-2 h-4 w-4" />{t.exportIcs}</Button>
+          <Button variant="secondary" onClick={() => icsRef.current?.click()}><Upload className="mr-2 h-4 w-4" />{t.importIcs}</Button>
           <input ref={icsRef} type="file" accept=".ics,text/calendar" hidden onChange={(e) => {
             const f = e.target.files?.[0]; if (!f) return;
-            read(f, (t) => { const s = fromICS(t); setData((d) => ({ ...d, shifts: [...d.shifts, ...s] })); setMsg(`Imported ${s.length} shifts from calendar.`); });
+            read(f, (text) => { const s = fromICS(text); setData((d) => ({ ...d, shifts: [...d.shifts, ...s] })); setMsg(t.importedShifts(s.length)); });
             e.target.value = "";
           }} />
         </div>
       </Card>
       <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">Backup & restore</h2>
-        <p className="text-sm text-muted-foreground">Data is stored on this device only. Save a backup regularly.</p>
+        <h2 className="font-semibold">{t.backupRestore}</h2>
+        <p className="text-sm text-muted-foreground">{t.backupHint}</p>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => download(`shift-backup-${today()}.json`, JSON.stringify(data, null, 2), "application/json")}><Download className="mr-2 h-4 w-4" />Download backup</Button>
-          <Button variant="secondary" onClick={() => jsonRef.current?.click()}><Upload className="mr-2 h-4 w-4" />Restore backup</Button>
+          <Button onClick={() => download(`shift-backup-${today()}.json`, JSON.stringify(data, null, 2), "application/json")}><Download className="mr-2 h-4 w-4" />{t.downloadBackup}</Button>
+          <Button variant="secondary" onClick={() => jsonRef.current?.click()}><Upload className="mr-2 h-4 w-4" />{t.restoreBackup}</Button>
           <input ref={jsonRef} type="file" accept=".json,application/json" hidden onChange={(e) => {
             const f = e.target.files?.[0]; if (!f) return;
-            read(f, (t) => {
-              try { const d = JSON.parse(t); if (!Array.isArray(d.shifts)) throw 0; if (confirm("Replace all current data with this backup?")) { setData(() => d); setMsg("Backup restored."); } }
-              catch { setMsg("That file isn't a valid backup."); }
+            read(f, (text) => {
+              try { const d = JSON.parse(text); if (!Array.isArray(d.shifts)) throw 0; if (confirm(t.confirmRestore)) { setData(() => d); setMsg(t.backupRestored); } }
+              catch { setMsg(t.invalidBackup); }
             });
             e.target.value = "";
           }} />
@@ -367,7 +363,7 @@ function DataTab({ data, setData }: Omit<P, "money">) {
   );
 }
 
-function CalendarTab({ data, setData, money }: P) {
+function CalendarTab({ data, setData, money, t, locale, lang }: P & { locale: string | undefined; lang: "en" | "ru" }) {
   const [month, setMonth] = useState(today().slice(0, 7));
   const [sel, setSel] = useState<string | null>(null);
   const [y = 2026, mo = 1] = month.split("-").map(Number);
@@ -386,21 +382,21 @@ function CalendarTab({ data, setData, money }: P) {
   const shift = (n: number) => { const d = new Date(y, mo - 1 + n, 1); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); setSel(null); };
   const selList = sel ? (byDay[sel] ?? []).sort((a, b) => a.start.localeCompare(b.start)) : [];
   const upd = (id: string, patch: Partial<Shift>) => setData((d) => ({ ...d, shifts: d.shifts.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
-  const add = (t: { start: string; end: string; breakMin: number }) => sel && setData((d) => ({ ...d, shifts: [...d.shifts, { id: uid(), date: sel, ...t, note: "" }] }));
+  const add = (tm: { start: string; end: string; breakMin: number }) => sel && setData((d) => ({ ...d, shifts: [...d.shifts, { id: uid(), date: sel, ...tm, note: "" }] }));
   return (
     <div className="space-y-4 pt-4">
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => shift(-1)}>‹</Button>
-        <h2 className="font-semibold">{new Date(y, mo - 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
+        <h2 className="font-semibold">{new Date(y, mo - 1).toLocaleDateString(locale, { month: "long", year: "numeric" })}</h2>
         <Button variant="ghost" onClick={() => shift(1)}>›</Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        {([["all", "All"], ["scheduled", "Scheduled"], ["worked", "Worked"], ["notes", "With notes"]] as const).map(([k, l]) => (
+        {([["all", t.filterAll], ["scheduled", t.filterScheduled], ["worked", t.filterWorked], ["notes", t.filterNotes]] as const).map(([k, l]) => (
           <Button key={k} size="sm" variant={filter === k ? "default" : "outline"} onClick={() => setFilter(k)}>{l}</Button>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d}>{d}</div>)}
+        {weekdayShort[lang].map((d) => <div key={d}>{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: lead }).map((_, i) => <div key={"e" + i} />)}
@@ -411,7 +407,7 @@ function CalendarTab({ data, setData, money }: P) {
           const isToday = date === today();
           return (
             <button key={date} onClick={() => setSel(date)}
-              className={`min-h-20 rounded-md border p-1 text-left text-xs transition-colors ${sel === date ? "border-primary ring-1 ring-primary" : "border-border"} ${list.length ? "bg-accent" : "bg-card"} ${i === 15 ? "" : ""}`}>
+              className={`min-h-20 rounded-md border p-1 text-left text-xs transition-colors ${sel === date ? "border-primary ring-1 ring-primary" : "border-border"} ${list.length ? "bg-accent" : "bg-card"}`}>
               <div className={`font-semibold ${isToday ? "text-primary" : ""}`}>{i + 1}</div>
               {list.length > 0 && (<>
                 <div className="truncate text-muted-foreground">{list.map((s) => s.start).join(", ")}</div>
@@ -424,25 +420,25 @@ function CalendarTab({ data, setData, money }: P) {
       </div>
       {sel && (
         <Card className="space-y-2 p-4">
-          <h3 className="font-semibold">{new Date(sel + "T00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h3>
-          {selList.length === 0 && <p className="text-sm text-muted-foreground">No shifts.</p>}
+          <h3 className="font-semibold">{new Date(sel + "T00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}</h3>
+          {selList.length === 0 && <p className="text-sm text-muted-foreground">{t.noShifts}</p>}
           {selList.map((s) => (
             <div key={s.id} className="grid grid-cols-2 items-end gap-2 border-t border-border pt-2 sm:grid-cols-[1fr_1fr_90px_1fr_auto]">
-              <Field label="Start"><Input type="time" value={s.start} onChange={(e) => upd(s.id, { start: e.target.value })} /></Field>
-              <Field label="End"><Input type="time" value={s.end} onChange={(e) => upd(s.id, { end: e.target.value })} /></Field>
-              <Field label="Break"><Input type="number" min={0} value={s.breakMin} onChange={(e) => upd(s.id, { breakMin: +e.target.value })} /></Field>
-              <Field label="Note"><Input value={s.note ?? ""} onChange={(e) => upd(s.id, { note: e.target.value })} /></Field>
+              <Field label={t.start}><Input type="time" value={s.start} onChange={(e) => upd(s.id, { start: e.target.value })} /></Field>
+              <Field label={t.end}><Input type="time" value={s.end} onChange={(e) => upd(s.id, { end: e.target.value })} /></Field>
+              <Field label={t.break}><Input type="number" min={0} value={s.breakMin} onChange={(e) => upd(s.id, { breakMin: +e.target.value })} /></Field>
+              <Field label={t.note}><Input value={s.note ?? ""} onChange={(e) => upd(s.id, { note: e.target.value })} /></Field>
               <div className="flex items-center gap-2 text-sm">
                 <span className="whitespace-nowrap">{fmtH(shiftHours(s))} · {money(shiftPay(s, data.rates))}</span>
-                <Button size="icon" variant="ghost" aria-label="Delete shift" onClick={() => setData((d) => ({ ...d, shifts: d.shifts.filter((x) => x.id !== s.id) }))}><Trash2 className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" aria-label={t.delete} onClick={() => setData((d) => ({ ...d, shifts: d.shifts.filter((x) => x.id !== s.id) }))}><Trash2 className="h-4 w-4" /></Button>
               </div>
             </div>
           ))}
           <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-            {data.templates.map((t) => (
-              <Button key={t.id} size="sm" variant="secondary" onClick={() => add({ start: t.start, end: t.end, breakMin: t.breakMin })}>+ {t.name}</Button>
+            {data.templates.map((tp) => (
+              <Button key={tp.id} size="sm" variant="secondary" onClick={() => add({ start: tp.start, end: tp.end, breakMin: tp.breakMin })}>+ {tp.name}</Button>
             ))}
-            <Button size="sm" variant="outline" onClick={() => add({ start: "09:00", end: "17:00", breakMin: 0 })}>+ Custom</Button>
+            <Button size="sm" variant="outline" onClick={() => add({ start: "09:00", end: "17:00", breakMin: 0 })}>{t.customShift}</Button>
           </div>
         </Card>
       )}

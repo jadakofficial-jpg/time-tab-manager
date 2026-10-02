@@ -3,7 +3,11 @@ import { useEffect, useState } from "react";
 export type Template = { id: string; name: string; start: string; end: string; breakMin: number };
 export type Shift = { id: string; date: string; start: string; end: string; breakMin: number; note?: string | undefined };
 export type Rate = { id: string; from: string; rate: number };
-export type Data = { workplace: string; currency: string; templates: Template[]; shifts: Shift[]; rates: Rate[] };
+// A pay period is any day-of-month range; startDay/endDay are inclusive.
+// An endDay of 31 effectively means "to end of month" since no month has
+// more than 31 days, so a shift's own day-of-month never exceeds it.
+export type Period = { id: string; label: string; startDay: number; endDay: number };
+export type Data = { workplace: string; currency: string; templates: Template[]; shifts: Shift[]; rates: Rate[]; periods: Period[] };
 
 const KEY = "shift-control-v1";
 export const uid = () => Math.random().toString(36).slice(2, 10);
@@ -17,6 +21,10 @@ const defaults: Data = {
   ],
   shifts: [],
   rates: [],
+  periods: [
+    { id: uid(), label: "1–15", startDay: 1, endDay: 15 },
+    { id: uid(), label: "16–end", startDay: 16, endDay: 31 },
+  ],
 };
 
 export function useData() {
@@ -52,6 +60,8 @@ export function rateFor(date: string, rates: Rate[]) {
 }
 
 export const shiftPay = (s: Shift, rates: Rate[]) => shiftHours(s) * rateFor(s.date, rates);
+
+export const inPeriod = (day: number, p: Period) => day >= p.startDay && day <= p.endDay;
 
 export type Summary = { shifts: number; hours: number; pay: number };
 export function summarize(list: Shift[], rates: Rate[]): Summary {
